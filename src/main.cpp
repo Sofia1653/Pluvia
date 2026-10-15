@@ -1,13 +1,10 @@
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-// Wi-Fi: usem a mesma rede do computador
 const char* WIFI_SSID = "uaifai-tiradentes";
 const char* WIFI_SENHA = "bemvindoaocesar";
 
-// IP IPv4 do computador onde roda o Mosquitto
 const char* MQTT_BROKER = "172.26.68.103"; 
 const int MQTT_PORT = 1883;
 
