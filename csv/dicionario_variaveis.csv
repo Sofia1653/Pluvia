@@ -1,0 +1,52 @@
+variavel,status,grupo,papel_no_modelo,tipo,unidade,descricao,fonte,preenchimento_pct,observacao
+bairro,no_dataset,chave,chave,texto,-,Nome do bairro/localidade (grafia mais frequente na Defesa Civil),F01,100.0,"78 unidades com >=1 registro de alagamento; algumas sao localidades (ex.: Ibura de Baixo, Iraque, UR 05)"
+regional,no_dataset,contexto,feature categorica,texto,-,Regional da Defesa Civil (moda por bairro),F01,98.7,Ausente nas linhas de 2019-2022 no original; preenchida pela moda dos outros anos
+data,no_dataset,chave,chave,data,aaaa-mm-dd,Dia (horario local) do ponto de dados,derivado,100.0,Janela 2014-01-01 a 2021-12-31 (limite da chuva A301)
+alagou,no_dataset,alvo,alvo (rotulo amplo),binario 0/1,-,1 se ha registro com 'alag' em Ocorrencia OU Solicitacao no bairro e dia,F01,100.0,"314 positivos (0,14%). Inclui Monitoramento/Vistoria Alagado (acao de rotina)"
+n_registros_alag,no_dataset,vazamento,NAO USAR COMO FEATURE,int,-,Numero de registros de alagamento (amplo) no bairro e dia,F01,100.0,Deriva do alvo do proprio dia: usar apenas para analise
+chuva_dia_mm,no_dataset,chuva,feature (observada no dia),float,mm,Chuva acumulada no dia local (A301),F02,96.5,Vazio se <12 h validas. Em producao deve vir de PREVISAO de chuva. Mesma para todos os bairros
+chuva_max_1h_mm,no_dataset,chuva,feature (observada no dia),float,mm/h,Maior intensidade horaria do dia,F02,96.5,Idem: exige previsao em producao
+horas_validas_dia,no_dataset,controle,controle de qualidade,int,h,Horas com medicao valida da A301 no dia (0-24),F02,100.0,Use para filtrar dias com falha
+chuva_d1_mm,no_dataset,chuva,feature (antecedente),float,mm,Chuva do dia anterior,F02,96.5,Vazio se >50% das horas faltarem
+chuva_ult3d_mm,no_dataset,chuva,feature (antecedente),float,mm,Chuva acumulada nos 3 dias anteriores (D-3..D-1),F02,96.6,Exclui o proprio dia
+chuva_ult7d_mm,no_dataset,chuva,feature (antecedente),float,mm,Chuva acumulada nos 7 dias anteriores,F02,96.8,Proxy de saturacao do solo/drenagem
+chuva_ult15d_mm,no_dataset,chuva,feature (antecedente),float,mm,Chuva acumulada nos 15 dias anteriores,F02,97.4,
+chuva_ult30d_mm,no_dataset,chuva,feature (antecedente),float,mm,Chuva acumulada nos 30 dias anteriores,F02,97.8,Vazio nos primeiros dias de 2014
+n_alag_bairro_365d,no_dataset,historico,feature,int,-,Ocorrencias (rotulo amplo) do bairro nos 365 dias ANTERIORES ao dia,F01,100.0,So eventos estritamente anteriores (sem vazamento)
+dias_desde_ultimo_alag,no_dataset,historico,feature,int,dias,Dias desde o ultimo evento (amplo) no bairro,F01,60.9,Vazio se nunca houve antes
+n_bairros_alag_dia_anterior,no_dataset,historico,feature,int,-,Numero de bairros com alagamento (amplo) no dia anterior,F01,100.0,Indica evento recente na cidade
+mes,no_dataset,tempo,feature,int,1-12,Mes do ano,derivado,100.0,Estacao chuvosa aproximadamente abr-ago
+dia_do_ano_sin,no_dataset,tempo,feature,float,-,Seno do dia do ano (sazonalidade ciclica),derivado,100.0,
+dia_do_ano_cos,no_dataset,tempo,feature,float,-,Cosseno do dia do ano,derivado,100.0,
+fase_lunar,no_dataset,mare,feature,float,0-1,"Fase lunar (0=nova, 0.5=cheia), calculo aproximado",derivado,100.0,Substituto fraco da mare
+sizigia,no_dataset,mare,feature,binario 0/1,-,1 se a lua esta a ~2 dias da nova ou cheia,derivado,100.0,Aproximado
+mare_max_dia_m,no_dataset,mare,feature,float,m,"Preamar prevista do dia (anomalia, media=0)",F17,100.0,Mare astronomica por analise harmonica; sem mare meteorologica
+mare_min_dia_m,no_dataset,mare,feature,float,m,Baixamar prevista do dia,F17,100.0,
+mare_amp_dia_m,no_dataset,mare,feature,float,m,Amplitude da mare no dia (max-min),F17,100.0,Alta = sizigia
+mare_na_hora_pico_chuva_m,no_dataset,mare,feature,float,m,Mare prevista na hora de maior chuva do dia,F17+F02,65.7,Vazio em dias sem chuva; exige hora da chuva (previsao) em producao
+mare_subindo_na_hora_pico,no_dataset,mare,feature,binario 0/1,-,1 se a mare estava subindo na hora de maior chuva,F17+F02,65.7,Vazio em dias sem chuva
+alagou_estrito,no_dataset,alvo,alvo (rotulo estrito),binario 0/1,-,1 se Ocorrencia = Alagamentos / Imoveis Alagados no bairro e dia,F01,100.0,162 positivos; so 1 em 2018 e 9 em 2017. Recomendado como alvo principal
+n_registros_alag_estrito,no_dataset,vazamento,NAO USAR COMO FEATURE,int,-,Numero de registros estritos no bairro e dia,F01,100.0,Deriva do alvo do proprio dia: usar apenas para analise
+n_alag_estrito_bairro_365d,no_dataset,historico,feature,int,-,"Idem n_alag_bairro_365d, rotulo estrito",F01,100.0,
+dias_desde_ultimo_alag_estrito,no_dataset,historico,feature,int,dias,"Idem dias_desde_ultimo_alag, rotulo estrito",F01,43.4,Vazio se nunca houve antes
+area_km2,no_dataset,local,feature estatica,float,km2,Area do bairro,F11,96.2,Calculada dos limites oficiais 2023
+lat_centro,no_dataset,local,feature estatica,float,graus,Latitude do centro (media dos pontos da grade),F11/F14,96.2,
+lon_centro,no_dataset,local,feature estatica,float,graus,Longitude do centro,F11/F14,96.2,
+n_pontos_grade,no_dataset,local,controle de qualidade,int,-,Pontos da grade de 250 m usados no bairro,F14,96.2,Poucos pontos = estatisticas de altitude pouco confiaveis
+alt_media_m,no_dataset,local,feature estatica,float,m,Altitude media (DEM Copernicus ~90 m),F14,94.9,Mau indicador isolado: ver relatorio (paradoxo da altitude)
+alt_mediana_m,no_dataset,local,feature estatica,float,m,Altitude mediana,F14,94.9,
+alt_min_m,no_dataset,local,feature estatica,float,m,Altitude minima,F14,94.9,DEM tem ruido (min. observado -5 m)
+alt_max_m,no_dataset,local,feature estatica,float,m,Altitude maxima,F14,94.9,
+alt_desvio_m,no_dataset,local,feature estatica,float,m,Desvio padrao da altitude (relevo interno),F14,94.9,Candidato melhor que a media
+alt_p10_m,no_dataset,local,feature estatica,float,m,Percentil 10 da altitude (partes baixas),F14,94.9,
+pct_pontos_abaixo_5m,no_dataset,local,feature estatica,float,%,Percentual de pontos da grade abaixo de 5 m,F14,94.9,Sensivel ao erro vertical do DEM
+pct_area_faixa_marginal,no_dataset,local,feature estatica,float,%,Percentual de pontos dentro de faixa marginal de rio/canal,F12,96.2,Sinal esperado: bairros com 0% alagam menos
+dist_faixa_media_m,no_dataset,local,feature estatica,float,m,Distancia media dos pontos ate a faixa marginal mais proxima,F12,96.2,Aproximada por vertices
+dist_faixa_min_m,no_dataset,local,feature estatica,float,m,Menor distancia a uma faixa marginal,F12,96.2,Aproximada por vertices
+local_casado,no_dataset,controle,controle de qualidade,binario 0/1,-,1 se o bairro casou com os limites oficiais,F11,100.0,"0 = sem features de local (Ibura de Baixo, Iraque, UR 05)"
+hand_m,nao_coletada,local,feature (planejada),,,altura acima da drenagem mais proxima,F14+F12,,planejada: derivar da grade de elevacao
+pct_area_impermeavel,nao_coletada,local,feature (planejada),,,impermeabilizacao do entorno,MapBiomas/OSM,,planejada: fonte nao testada
+eh_tunel_passagem,nao_coletada,local,feature (planejada),,,ponto em tunel/passagem inferior,F15,,planejada: OSM nao testado
+densidade_vias,nao_coletada,local,feature (planejada),,,densidade viaria,F15,,planejada
+precip_apac_cemaden,nao_coletada,chuva,feature (planejada),,,chuva multi-estacao e dados de 2022+,F03/F04,,pendente: pedir dados a APAC/CEMADEN
+nivel_agua_sensor_cm,nao_coletada,validacao,feature (planejada),,,leitura do ESP32,F16,,pendente: sensor nao existe ainda
