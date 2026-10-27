@@ -2,16 +2,16 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-const char* WIFI_SSID = "uaifai-tiradentes";
-const char* WIFI_SENHA = "bemvindoaocesar";
+const char* WIFI_SSID = "NOME_WIFI";
+const char* WIFI_SENHA = "SENHA_WIFI.";
 
-const char* MQTT_BROKER = "172.26.68.103"; 
+const char* MQTT_BROKER = "IP_DO_SERVIDOR_MQTT"; 
 const int MQTT_PORT = 1883;
 
 const char* TOPICO = "pluvia/sensor01/leituras";
 
-#define TRIG_PIN 5
-#define ECHO_PIN 18
+#define TRIG_PIN 14
+#define ECHO_PIN 15
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
