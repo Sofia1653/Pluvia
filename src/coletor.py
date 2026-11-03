@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import math
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,11 @@ ARQUIVO = Path(__file__).resolve().parent.parent / "leituras.csv"
 TOPICO = "pluvia/+/leituras"
 TOPICO_CAMERA = "pluvia/+/camera"
 PASTA_IMAGENS = ARQUIVO.parent / "data" / "imagens"
-BROKER = "127.0.0.1"
+# IP do computador que roda o Mosquitto no Docker (o mesmo MQTT_BROKER do secrets.h).
+# Nao use 127.0.0.1/localhost: num PC com Mosquitto instalado no Windows,
+# o coletor conecta nesse outro broker e nao recebe nada da ESP.
+# Para trocar sem editar o arquivo: defina a variavel de ambiente PLUVIA_BROKER.
+BROKER = os.environ.get("PLUVIA_BROKER", "192.168.100.10")
 PORTA = 1883
 
 
