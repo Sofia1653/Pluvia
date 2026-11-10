@@ -104,6 +104,8 @@ void enviarFoto() {
 
 void setup() {
     Serial.begin(9600);
+    // Reduz o aquecimento: 160 MHz sobra para ler o sensor e enviar fotos.
+    setCpuFrequencyMhz(160);
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
     digitalWrite(TRIG_PIN, LOW);
@@ -112,6 +114,8 @@ void setup() {
     mqtt.setBufferSize(256);
     mqtt.setSocketTimeout(3);
     WiFi.mode(WIFI_STA);
+    // Economia de energia do radio entre os envios (menos calor).
+    WiFi.setSleep(true);
     WiFi.begin(WIFI_SSID, WIFI_SENHA);
     Serial.println("Conectando ao Wi-Fi. Confira include/secrets.h.");
 }
@@ -119,12 +123,13 @@ void setup() {
 void loop() {
     unsigned long agora = millis();
     if (WiFi.status() != WL_CONNECTED) {
-        if (agora - tentativaWiFi >= 10000) {
+        // Sem rede, tenta a cada 30 s (antes 10 s): procurar rede sem parar esquenta a placa.
+        if (agora - tentativaWiFi >= 30000) {
             tentativaWiFi = agora;
             Serial.println("Wi-Fi desconectado. Tentando novamente.");
             WiFi.reconnect();
         }
-        delay(10);
+        delay(100);
         return;
     }
     if (!mqtt.connected()) {

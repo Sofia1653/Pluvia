@@ -1,38 +1,44 @@
-﻿# Pluvia — ESP32-CAM e ultrassom
+# PLUVIA — sistema embarcado (Grupo 2)
 
-Configuracao preparada para **AI Thinker ESP32-CAM / OV2640**, conforme a placa `esp32cam` do PlatformIO.
+O PLUVIA estima o risco de alagamento em pontos críticos do Recife cruzando chuva, maré e histórico de
+ocorrências com um modelo de Machine Learning. Este repositório tem a parte embarcada: uma ESP32-CAM com
+sensor ultrassônico e câmera que mede o nível da água e fotografa o ponto, enviando tudo por MQTT, mais o
+coletor e o dashboard. O modelo de risco por bairro fica em [pluvia-ml](https://github.com/ninahffbs/pluvia-ml).
 
-## Configurar e executar
+![Arquitetura](docs/arquitetura_pluvia.png)
 
-1. Copie `include/secrets.example.h` para `include/secrets.h`.
-2. Preencha o nome e a senha do Wi-Fi de 2,4 GHz. Configure `MQTT_BROKER` com o IPv4 do computador na mesma rede da placa. O exemplo usa `172.26.68.103`, observado nesta maquina; confira novamente com `ipconfig` se a rede mudar. Nao use `127.0.0.1` no ESP32.
-3. Inicie o broker com `mosquitto -c mosquitto.conf -v` (use apenas uma instancia na porta 1883). A rede precisa permitir acesso da placa ao computador nessa porta.
-4. Compile e grave com PlatformIO: `pio run -t upload`. Abra o Monitor Serial a **9600 baud**. O codigo imprime o resultado da camera, o IP, a conexao MQTT e cada envio.
-5. Instale a dependencia Python, se necessario: `python -m pip install "paho-mqtt>=2,<3"`.
-6. No computador do broker, execute `python src/coletor.py`. Reinicie o coletor se ele ja estava aberto antes da atualizacao.
+## Estrutura
 
-`include/secrets.h` ja esta ignorado pelo Git. Sem esse arquivo, o firmware compila com valores de exemplo e nao conectara ao Wi-Fi ate serem preenchidos.
+| Caminho | Conteúdo |
+|---|---|
+| `platformio.ini`, `src/main.cpp` | Firmware da ESP32-CAM (sensor + câmera + MQTT) |
+| `src/teste_camera.cpp` | Teste isolado da câmera (foto no navegador, sem MQTT) |
+| `include/secrets.example.h` | Modelo de configuração de rede (copiar para `secrets.h`, que não vai para o Git) |
+| `src/coletor.py` | Assina o broker e salva leituras (`leituras.csv`) e fotos (`data/imagens/`) |
+| `applications/dashboard/` | Dashboard Streamlit com nível da água e análise das fotos por IA |
+| `schematics/` | Esquemático das ligações |
+| `docs/` | Guia de montagem, gravação e solução de problemas; diagrama da arquitetura |
+| `test/test_coletor.py` | Testes do coletor |
 
-## Ligacoes do ultrassom
+## Como rodar
 
-O firmware preserva **TRIG no GPIO14** e **ECHO no GPIO15**, com GND comum. Esses pinos sao compartilhados com microSD: este projeto nao inicializa o cartao; use sem cartao inserido.
+1. Crie `include/secrets.h` a partir do exemplo, com a rede Wi-Fi (2,4 GHz) e o IP do computador do broker.
+2. Grave o firmware com o PlatformIO (ambiente `esp32cam`; veja o passo a passo em `docs/guia_montagem.md`).
+3. Broker: `docker run -d --name mosquitto -p 1883:1883 eclipse-mosquitto mosquitto -c /mosquitto-no-auth.conf`
+   (depois, só `docker start mosquitto`). No Windows, libere a porta 1883 no firewall (comando no guia).
+4. Coletor: `python src/coletor.py` (outro computador: defina `PLUVIA_BROKER` com o IP dele).
+5. Dashboard: `pip install -r applications/dashboard/requirements.txt` e
+   `streamlit run applications/dashboard/app.py`.
 
-Se o sensor for HC-SR04 de 5 V, alimente conforme sua especificacao e use divisor resistivo/conversor para reduzir ECHO a 3,3 V antes do GPIO15. Por exemplo: ECHO → 1 kohm → GPIO15 → 2 kohm → GND. Nao conecte ECHO de 5 V diretamente ao ESP32. Use fonte estavel apropriada para a ESP32-CAM; resets durante fotos podem indicar alimentacao insuficiente.
+## Tópicos MQTT
 
-## Dados recebidos
+| Tópico | Publica | Assina | Conteúdo |
+|---|---|---|---|
+| `pluvia/sensor01/leituras` | ESP32-CAM | coletor | JSON `{"sensor_id":"PLUVIA_01","distancia_cm":12.34}` a cada 2 s |
+| `pluvia/sensor01/camera` | ESP32-CAM | coletor | JPEG 320×240 (≈3–5 KB) a cada 10 s |
 
-- A cada 2 segundos: JSON em `pluvia/sensor01/leituras`, com `sensor_id` e `distancia_cm`; gravado em `leituras.csv` na raiz.
-- A cada 10 segundos: foto JPEG 320x240 em `pluvia/sensor01/camera`; gravada em `data/imagens/sensor01/`, com data e hora no nome. Sao fotos periodicas, sem streaming de video ou classificacao de imagem.
-- Distancias fora de 2–400 cm ou sem eco sao descartadas e informadas no Serial. A camera continua enviando mesmo sem leitura valida do ultrassom.
-- Se a camera nao inicializar, o ultrassom continua funcionando. Confira o cabo da camera/modelo da placa e reinicie apos corrigir.
+## Integrantes
 
-As fotos se acumulam em disco; remova ou arquive conforme necessario. O timestamp e o horario local do computador coletor.
-
-## Diagnostico
-
-- `Wi-Fi desconectado`: confira credenciais, rede de 2,4 GHz e sinal.
-- `Falha MQTT`: confira IP do broker, porta 1883, firewall e acesso entre os dispositivos.
-- Coletor conectado, mas sem dados: confira no Serial se a placa informa `MQTT conectado` e `publicado`.
-- `Ultrassom sem leitura valida`: confira pinos, alimentacao, divisor de ECHO e objeto dentro da faixa do sensor.
-
-Referencias de implementacao: [CameraWebServer da Espressif](https://github.com/espressif/arduino-esp32/tree/master/libraries/ESP32/examples/Camera/CameraWebServer) e [API PubSubClient](https://pubsubclient.knolleary.net/api.html).
+Beatriz Victória Costa Pinto · Gabrielle Mastellari Velozo · Júlio César Aragão Vilas Bôas ·
+Sofia Gomes Tenório · Nina Henrique França Fernandes Bento de Sá · Thiago Vinnícius de Vasconcelos Brayner ·
+Maria Cláudia Rodrigues Corrêa de Oliveira Andrade
