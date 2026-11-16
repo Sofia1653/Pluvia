@@ -6,7 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('coletor', Path(__file__).resolve().parents[1] / 'src/coletor.py')
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+spec = importlib.util.spec_from_file_location('coletor', Path(__file__).resolve().parent / 'coletor.py')
 coletor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coletor)
 

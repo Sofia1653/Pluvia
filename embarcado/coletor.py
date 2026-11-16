@@ -2,17 +2,26 @@ import csv
 import json
 import logging
 import math
+import os
 from datetime import datetime
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
-ARQUIVO = Path(__file__).resolve().parent.parent / "leituras.csv"
+import armazenamento
+
+ARQUIVO = Path(__file__).resolve().parent / "dados" / "leituras.csv"
 TOPICO = "pluvia/+/leituras"
 TOPICO_CAMERA = "pluvia/+/camera"
-PASTA_IMAGENS = ARQUIVO.parent / "data" / "imagens"
-BROKER = "127.0.0.1"
+PASTA_IMAGENS = ARQUIVO.parent / "imagens"
+# IP do computador que roda o Mosquitto no Docker (o mesmo MQTT_BROKER do secrets.h).
+# Nao use 127.0.0.1/localhost: num PC com Mosquitto instalado no Windows,
+# o coletor conecta nesse outro broker e nao recebe nada da ESP.
+# Para trocar sem editar o arquivo: defina a variavel de ambiente PLUVIA_BROKER.
+BROKER = os.environ.get("PLUVIA_BROKER", "192.168.100.10")
 PORTA = 1883
+BANCO = armazenamento.Banco()
+ALTURA_CM = armazenamento.altura_montagem_cm()
 
 
 def on_connect(client, userdata, flags, reason_code, properties):
@@ -56,6 +65,7 @@ def on_message(client, userdata, msg):
 
     ts = datetime.now().isoformat(timespec="seconds")
     try:
+        ARQUIVO.parent.mkdir(parents=True, exist_ok=True)
         with open(ARQUIVO, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             if f.tell() == 0:
@@ -64,6 +74,7 @@ def on_message(client, userdata, msg):
     except OSError as erro:
         print(f"Erro ao salvar leitura em {ARQUIVO}: {erro}")
         return
+    BANCO.gravar_leitura(sensor_id, distancia, altura_cm=ALTURA_CM)
     print(ts, dados)
 
 
@@ -84,6 +95,7 @@ def salvar_imagem(msg):
         pasta.mkdir(parents=True, exist_ok=True)
         destino = pasta / (datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg")
         destino.write_bytes(msg.payload)
+        BANCO.gravar_foto(sensor, destino, len(msg.payload))
         print(f"Foto salva: {destino} ({len(msg.payload)} bytes)")
     except OSError as erro:
         print(f"Erro ao salvar foto: {erro}")

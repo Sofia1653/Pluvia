@@ -71,6 +71,11 @@ float medirDistancia() {
 }
 
 void enviarFoto() {
+    // A camera guarda a foto tirada logo depois da anterior (10 s atras).
+    // Descartamos essa foto atrasada e capturamos uma nova.
+    camera_fb_t* velha = esp_camera_fb_get();
+    if (velha) esp_camera_fb_return(velha);
+
     camera_fb_t* foto = esp_camera_fb_get();
     if (!foto) {
         Serial.println("Falha ao capturar foto.");
