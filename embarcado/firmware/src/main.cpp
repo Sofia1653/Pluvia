@@ -104,6 +104,7 @@ void enviarFoto() {
 
 void setup() {
     Serial.begin(9600);
+    setCpuFrequencyMhz(160);
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
     digitalWrite(TRIG_PIN, LOW);
@@ -112,6 +113,7 @@ void setup() {
     mqtt.setBufferSize(256);
     mqtt.setSocketTimeout(3);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(true);
     WiFi.begin(WIFI_SSID, WIFI_SENHA);
     Serial.println("Conectando ao Wi-Fi. Confira include/secrets.h.");
 }
@@ -119,12 +121,12 @@ void setup() {
 void loop() {
     unsigned long agora = millis();
     if (WiFi.status() != WL_CONNECTED) {
-        if (agora - tentativaWiFi >= 10000) {
+        if (agora - tentativaWiFi >= 30000) {
             tentativaWiFi = agora;
             Serial.println("Wi-Fi desconectado. Tentando novamente.");
             WiFi.reconnect();
         }
-        delay(10);
+        delay(100);
         return;
     }
     if (!mqtt.connected()) {

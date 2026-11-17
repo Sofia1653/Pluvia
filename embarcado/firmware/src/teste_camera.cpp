@@ -1,6 +1,4 @@
-// Teste simples da camera da ESP32-CAM (AI Thinker).
-// Nao usa MQTT nem o sensor: so liga a camera e mostra uma foto no navegador.
-// Abra no navegador o endereco que aparecer no Serial Monitor.
+// Teste local da camera e do ultrassom, sem depender de Wi-Fi ou MQTT.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -13,6 +11,19 @@
 #endif
 
 WebServer servidor(80);
+bool cameraPronta = false;
+unsigned long ultimaLeitura = 0;
+
+float medirDistancia() {
+    digitalWrite(14, LOW);
+    delayMicroseconds(3);
+    digitalWrite(14, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(14, LOW);
+    unsigned long duracao = pulseIn(15, HIGH, 30000);
+    float distancia = duracao * 0.0343f / 2.0f;
+    return duracao && distancia >= 2 && distancia <= 400 ? distancia : -1;
+}
 
 bool iniciarCamera() {
     camera_config_t config = {};
@@ -54,14 +65,20 @@ bool iniciarCamera() {
 void paginaInicial() {
     servidor.send(200, "text/html",
         "<html><body style='font-family:sans-serif;text-align:center'>"
-        "<h2>Teste da camera - Pluvia</h2>"
-        "<img src='/foto' style='max-width:100%'><br><br>"
-        "<button onclick='location.reload()'>Tirar outra foto</button>"
+        "<h2>Teste da camera e ultrassom - Pluvia</h2>"
+        "<p id='distancia'>Medindo...</p>"
+        "<img id='foto' src='/foto' style='max-width:100%'><br><br>"
+        "<button onclick=\"document.getElementById('foto').src='/foto?t='+Date.now()\">Tirar outra foto</button>"
+        "<script>async function medir(){try{document.getElementById('distancia').textContent=await (await fetch('/distancia')).text()}catch(e){document.getElementById('distancia').textContent='Falha de conexao'}} medir();setInterval(medir,2000)</script>"
         "</body></html>");
 }
 
 // Tira uma foto e envia para o navegador.
 void enviarFoto() {
+    if (!cameraPronta) {
+        servidor.send(503, "text/plain", "Camera nao iniciou");
+        return;
+    }
     // A camera guarda a foto tirada logo depois da anterior.
     // Descartamos essa foto "velha" e pegamos uma nova.
     camera_fb_t* velha = esp_camera_fb_get();
@@ -84,30 +101,37 @@ void enviarFoto() {
 void setup() {
     Serial.begin(9600);
     delay(500);
-    Serial.println("\n--- Teste da camera ---");
+    Serial.println("\n--- Teste da camera e ultrassom ---");
+    pinMode(14, OUTPUT);
+    pinMode(15, INPUT);
+    digitalWrite(14, LOW);
+    cameraPronta = iniciarCamera();
+    if (!cameraPronta) Serial.println("Confira o cabo da camera e a alimentacao.");
 
-    if (!iniciarCamera()) {
-        Serial.println("Confira o cabo laranja da camera e a alimentacao.");
-        return;
+    WiFi.mode(WIFI_AP);
+    if (!WiFi.softAP("Pluvia-Teste", "pluvia123")) {
+        Serial.println("Falha ao iniciar rede Wi-Fi de teste.");
     }
-
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_SENHA);
-    Serial.print("Conectando ao Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nWi-Fi conectado!");
 
     servidor.on("/", paginaInicial);
     servidor.on("/foto", enviarFoto);
+    servidor.on("/distancia", []() {
+        float distancia = medirDistancia();
+        servidor.send(200, "text/plain", distancia < 0 ? "Ultrassom sem leitura valida" : "Distancia: " + String(distancia, 1) + " cm");
+    });
     servidor.begin();
 
     Serial.print("Abra no navegador: http://");
-    Serial.println(WiFi.localIP());
+    Serial.println(WiFi.softAPIP());
+    Serial.println("Rede: Pluvia-Teste | Senha: pluvia123");
 }
 
 void loop() {
     servidor.handleClient();
+    if (millis() - ultimaLeitura >= 2000) {
+        ultimaLeitura = millis();
+        float distancia = medirDistancia();
+        if (distancia < 0) Serial.println("Ultrassom sem leitura valida (TRIG 14, ECHO 15).");
+        else Serial.printf("Distancia: %.1f cm\n", distancia);
+    }
 }
