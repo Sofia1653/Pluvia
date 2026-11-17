@@ -69,7 +69,8 @@ r = avaliar(modelo, entrada, altura_montagem_cm=100)
 
 - O sensor **não é feature** do modelo. Não há histórico de leituras para treinar, então a combinação é uma regra (máximo dos dois níveis), sem retreino.
 - A integração é por **biblioteca**: `avaliar` precisa ser chamada por quem tem as features do bairro e do dia. Não há API de inferência, DAG do Airflow nem serviço que chame `avaliar` periodicamente.
-- As **fotos** só são armazenadas. Nenhum código as analisa.
+- As **fotos** podem ser exibidas e analisadas opcionalmente pelo dashboard em `applications/dashboard/`, com CLIP. Essa análise experimental não é integrada à função `avaliar` nem ao modelo de risco por bairro.
+- O dashboard lê os dados em `embarcado/dados/` e combina o sensor com a análise opcional de imagem. Ele não executa o modelo por bairro e usa limites percentuais próprios, diferentes dos limites em centímetros de `alerta.py`.
 - O alerta lê o **CSV**, não o Postgres. O banco guarda o histórico, mas nada o consulta ainda.
 - Os limiares de nível da água são **provisórios** e precisam de calibração com a instalação real.
 - Segurança: o Mosquitto está anônimo e sem TLS.
