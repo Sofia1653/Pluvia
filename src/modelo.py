@@ -5,14 +5,29 @@ Depende de preparacao.py (precisa estar no mesmo caminho de importacao).
 """
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier, HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.tree import DecisionTreeClassifier
 
 import preparacao as prep
 
 SEMENTE = 42
-COMPLEXIDADE = ["logistica", "floresta", "boosting"]       # do mais simples ao mais complexo
+# do mais simples ao mais complexo (a regra de parcimonia percorre nesta ordem).
+# logistica = baseline; arvore, floresta e adaboost = os tres modelos da lista da especificacao;
+# boosting (HistGradientBoosting) = modelo adicional, fora da lista (depende de aval do professor)
+COMPLEXIDADE = ["logistica", "arvore", "floresta", "adaboost", "boosting"]
+BASELINE = "logistica"
+MODELOS_DA_LISTA = ["arvore", "floresta", "adaboost"]
+MODELO_ADICIONAL = "boosting"
+
+
+def _pesos_positivos(y, expoente):
+    """Peso do positivo = (negativos/positivos) ** expoente; 0.5 = raiz (o peso integral, ~1400x, causa sobreajuste)."""
+    y = np.asarray(y)
+    pos = max(int(y.sum()), 1)
+    razao = (len(y) - pos) / pos
+    return np.where(y == 1, razao ** expoente, 1.0)
 
 
 # ------------------------------------------------------------------ estimadores (interface: fit / predict_proba)
@@ -23,6 +38,45 @@ class Logistica:
     def fit(self, X, y):
         self.m_ = LogisticRegression(C=self.C, class_weight=self.class_weight, max_iter=self.max_iter)
         self.m_.fit(X, y)
+        return self
+
+    def predict_proba(self, X):
+        return self.m_.predict_proba(X)
+
+
+class Arvore:
+    """Arvore de decisao unica: o modelo de arvores mais simples e o mais facil de explicar (regras se/entao).
+    Rasa e com folhas grandes porque, com ~160 eventos, uma arvore profunda decora os poucos positivos."""
+
+    def __init__(self, max_depth=5, min_samples_leaf=300, peso_pos_exp=0.5, semente=SEMENTE):
+        self.max_depth, self.min_samples_leaf = max_depth, min_samples_leaf
+        self.peso_pos_exp, self.semente = peso_pos_exp, semente
+
+    def fit(self, X, y):
+        self.m_ = DecisionTreeClassifier(max_depth=self.max_depth, min_samples_leaf=self.min_samples_leaf,
+                                         random_state=self.semente)
+        self.m_.fit(X, y, sample_weight=_pesos_positivos(y, self.peso_pos_exp))
+        return self
+
+    def predict_proba(self, X):
+        return self.m_.predict_proba(X)
+
+
+class AdaBoost:
+    """AdaBoost com arvores rasas (tocos de profundidade 2): cada arvore nova foca nos exemplos que as anteriores
+    erraram. Os positivos ja comecam com peso maior (raiz do desbalanceamento), como no boosting."""
+
+    def __init__(self, n_estimators=200, learning_rate=0.1, max_depth=2, min_samples_leaf=200, peso_pos_exp=0.5,
+                 semente=SEMENTE):
+        self.n_estimators, self.learning_rate, self.max_depth = n_estimators, learning_rate, max_depth
+        self.min_samples_leaf, self.peso_pos_exp, self.semente = min_samples_leaf, peso_pos_exp, semente
+
+    def fit(self, X, y):
+        base = DecisionTreeClassifier(max_depth=self.max_depth, min_samples_leaf=self.min_samples_leaf,
+                                      random_state=self.semente)
+        self.m_ = AdaBoostClassifier(estimator=base, n_estimators=self.n_estimators,
+                                     learning_rate=self.learning_rate, random_state=self.semente)
+        self.m_.fit(X, y, sample_weight=_pesos_positivos(y, self.peso_pos_exp))
         return self
 
     def predict_proba(self, X):
@@ -54,9 +108,7 @@ class Boosting:
         self.min_samples_leaf, self.l2, self.peso_pos_exp, self.semente = min_samples_leaf, l2, peso_pos_exp, semente
 
     def fit(self, X, y):
-        pos = max(int(np.sum(y)), 1)
-        razao = (len(y) - pos) / pos                          # peso do positivo = razao ** expoente (0.5 = raiz)
-        w = np.where(np.asarray(y) == 1, razao ** self.peso_pos_exp, 1.0)
+        w = _pesos_positivos(y, self.peso_pos_exp)
         self.m_ = HistGradientBoostingClassifier(max_depth=self.max_depth, learning_rate=self.learning_rate,
                                                  max_iter=self.max_iter, min_samples_leaf=self.min_samples_leaf,
                                                  l2_regularization=self.l2, early_stopping=False,
@@ -68,13 +120,19 @@ class Boosting:
         return self.m_.predict_proba(X)
 
 
-FABRICAS = {"logistica": Logistica, "floresta": Floresta, "boosting": Boosting}
+FABRICAS = {"logistica": Logistica, "arvore": Arvore, "floresta": Floresta, "adaboost": AdaBoost,
+            "boosting": Boosting}
 PADROES = {"logistica": dict(C=0.1, class_weight="balanced"),
+           "arvore": dict(max_depth=5, min_samples_leaf=300, peso_pos_exp=0.5),
            "floresta": dict(n_estimators=200, max_depth=10, min_samples_leaf=100, max_features="sqrt", max_samples=0.3),
+           "adaboost": dict(n_estimators=200, learning_rate=0.1, max_depth=2, min_samples_leaf=200, peso_pos_exp=0.5),
            "boosting": dict(max_depth=4, learning_rate=0.05, max_iter=200, min_samples_leaf=200, l2=1.0, peso_pos_exp=0.5)}
-# o preparo depende do modelo: lineares precisam de log+imputacao+escala; a floresta so de imputacao; o boosting aceita vazios
+# o preparo depende do modelo: lineares precisam de log+imputacao+escala; arvores (unica, floresta, AdaBoost) so de
+# imputacao, pois sao invariantes a escala; o HistGradientBoosting aceita vazios nativamente
 PREP_KW = {"logistica": dict(log=True, escala=True, imputar=True),
+           "arvore": dict(log=False, escala=False, imputar=True),
            "floresta": dict(log=False, escala=False, imputar=True),
+           "adaboost": dict(log=False, escala=False, imputar=True),
            "boosting": dict(log=False, escala=False, imputar=False)}
 
 
