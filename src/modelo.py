@@ -138,13 +138,15 @@ PREP_KW = {"logistica": dict(log=True, escala=True, imputar=True),
 
 # ------------------------------------------------------------------ metricas
 def metricas(y, p, qs=(0.01, 0.05)):
-    """PR-AUC (principal), ROC-AUC e, para cada fatia q de maior risco, recall e precisao."""
+    """PR-AUC (principal), ROC-AUC e, para cada fatia q de maior risco em alerta, recall, precisao e
+    F1 da classe positiva (media harmonica de recall e precisao nesse corte)."""
     y = np.asarray(y)
     p = np.asarray(p, dtype=float)
     out = {"pr_auc": np.nan, "roc_auc": np.nan, "taxa_base": float(y.mean())}
     for q in qs:
         out[f"recall_top{round(q * 100)}"] = np.nan
         out[f"precisao_top{round(q * 100)}"] = np.nan
+        out[f"f1_top{round(q * 100)}"] = np.nan
     if y.sum() == 0 or y.sum() == len(y):
         return out
     out["pr_auc"] = float(average_precision_score(y, p))
@@ -153,8 +155,10 @@ def metricas(y, p, qs=(0.01, 0.05)):
     for q in qs:
         k = max(int(len(p) * q), 1)
         achados = float(y[ordem[:k]].sum())
-        out[f"recall_top{round(q * 100)}"] = achados / float(y.sum())
-        out[f"precisao_top{round(q * 100)}"] = achados / k
+        rec, prec = achados / float(y.sum()), achados / k
+        out[f"recall_top{round(q * 100)}"] = rec
+        out[f"precisao_top{round(q * 100)}"] = prec
+        out[f"f1_top{round(q * 100)}"] = 2 * rec * prec / (rec + prec) if rec + prec > 0 else 0.0
     return out
 
 
