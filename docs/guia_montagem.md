@@ -31,7 +31,7 @@ Testado de 27/10 a 10/11/2026. Esquemático: `schematics/esquematico_pluvia.png`
 2. `ipconfig` → IPv4 do Wi-Fi → colocar em `MQTT_BROKER` no `include/secrets.h`, junto com o nome e a senha
    da rede (2,4 GHz). Gravar a ESP de novo.
 3. `docker start mosquitto` (na primeira vez, `docker run`, ver README) e conferir com `docker ps`.
-4. `$env:PLUVIA_BROKER = "<IPv4>"` e `python src/coletor.py`.
+4. Inicie o PostgreSQL e configure `PLUVIA_DB_URL` conforme o README da raiz. Em seguida, execute `$env:PLUVIA_BROKER = "<IPv4>"` e `python src/coletor.py`.
 5. Na faculdade, se continuar `-2` com o firewall liberado, a rede está isolando os aparelhos: usar o roteador
    do celular em 2,4 GHz e repetir os passos 2 a 4.
 

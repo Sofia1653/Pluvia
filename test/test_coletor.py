@@ -11,16 +11,14 @@ coletor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coletor)
 
 class ColetorTest(unittest.TestCase):
-    def test_leituras_invalidas_nao_interrompem_csv(self):
-        with tempfile.TemporaryDirectory() as pasta, patch.object(coletor, 'ARQUIVO', Path(pasta) / 'leituras.csv'):
-            coletor.ARQUIVO.touch()
+    def test_leituras_invalidas_nao_interrompem_gravacao(self):
+        with patch.object(coletor.psycopg, 'connect') as conectar:
             for payload in [b'{}', b'[]', b'\xff', b'{"sensor_id":"x","distancia_cm":NaN}', b'{"sensor_id":"x","distancia_cm":true}', b'{"sensor_id":"x","distancia_cm":7.5}', b'{"sensor_id":"x","distancia_cm":8}']:
                 coletor.on_message(None, None, SimpleNamespace(topic='pluvia/sensor01/leituras', payload=payload))
-            with coletor.ARQUIVO.open(newline='') as arquivo:
-                linhas = list(csv.reader(arquivo))
-            self.assertEqual(len(linhas), 3)
-            self.assertEqual(linhas[0], ['timestamp', 'sensor_id', 'distancia_cm'])
-            self.assertEqual(linhas[1][1:], ['x', '7.5'])
+            executar = conectar.return_value.__enter__.return_value.execute
+            self.assertEqual(executar.call_count, 2)
+            self.assertEqual(executar.call_args_list[0].args[1], ('x', 7.5))
+            self.assertEqual(executar.call_args_list[1].args[1], ('x', 8))
 
     def test_camera_salva_binario_e_rejeita_payload_invalido(self):
         with tempfile.TemporaryDirectory() as pasta, patch.object(coletor, 'PASTA_IMAGENS', Path(pasta)):
@@ -32,6 +30,13 @@ class ColetorTest(unittest.TestCase):
             self.assertEqual(len(arquivos), 1)
             self.assertEqual(arquivos[0].read_bytes(), imagem)
             self.assertEqual(arquivos[0].parent.name, 'sensor01')
+
+    def test_falha_no_banco_nao_interrompe_proximas_mensagens(self):
+        with patch.object(coletor.psycopg, 'connect', side_effect=[coletor.psycopg.OperationalError('falha'), unittest.mock.MagicMock()]) as conectar:
+            msg = SimpleNamespace(topic='pluvia/sensor01/leituras', payload=b'{"sensor_id":"x","distancia_cm":8}')
+            coletor.on_message(None, None, msg)
+            coletor.on_message(None, None, msg)
+            self.assertEqual(conectar.call_count, 2)
 
 if __name__ == '__main__':
     unittest.main()
