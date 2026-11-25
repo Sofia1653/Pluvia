@@ -1,3 +1,4 @@
+import csv
 import json
 import logging
 import math
@@ -6,12 +7,11 @@ from datetime import datetime
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
-import psycopg
 
+ARQUIVO = Path(__file__).resolve().parent.parent / "leituras.csv"
 TOPICO = "pluvia/+/leituras"
 TOPICO_CAMERA = "pluvia/+/camera"
-PASTA_IMAGENS = Path(__file__).resolve().parent.parent / "data" / "imagens"
-DB_URL = os.environ.get("PLUVIA_DB_URL")
+PASTA_IMAGENS = ARQUIVO.parent / "data" / "imagens"
 # IP do computador que roda o Mosquitto no Docker (o mesmo MQTT_BROKER do secrets.h).
 # Nao use 127.0.0.1/localhost: num PC com Mosquitto instalado no Windows,
 # o coletor conecta nesse outro broker e nao recebe nada da ESP.
@@ -59,16 +59,17 @@ def on_message(client, userdata, msg):
         print(f"Mensagem ignorada em {msg.topic}: {erro}")
         return
 
+    ts = datetime.now().isoformat(timespec="seconds")
     try:
-        with psycopg.connect(DB_URL, connect_timeout=3) as conn:
-            conn.execute(
-                "INSERT INTO leituras_sensor (sensor_id, distancia_cm) VALUES (%s, %s)",
-                (sensor_id, distancia),
-            )
-    except psycopg.Error as erro:
-        logging.error("Erro ao salvar leitura no PostgreSQL: %s", erro)
+        with open(ARQUIVO, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if f.tell() == 0:
+                w.writerow(["timestamp", "sensor_id", "distancia_cm"])
+            w.writerow([ts, sensor_id, distancia])
+    except OSError as erro:
+        print(f"Erro ao salvar leitura em {ARQUIVO}: {erro}")
         return
-    print(datetime.now().isoformat(timespec="seconds"), dados)
+    print(ts, dados)
 
 
 def salvar_imagem(msg):
@@ -95,8 +96,6 @@ def salvar_imagem(msg):
 
 def main():
     logging.basicConfig(level=logging.WARNING)
-    if not DB_URL:
-        raise RuntimeError("Configure PLUVIA_DB_URL para conectar ao PostgreSQL")
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.enable_logger()
     client.on_connect = on_connect
@@ -104,7 +103,7 @@ def main():
     client.on_message = on_message
     client.reconnect_delay_set(min_delay=1, max_delay=30)
     try:
-        print(f"Conectando a {BROKER}:{PORTA}. Armazenamento: PostgreSQL")
+        print(f"Conectando a {BROKER}:{PORTA}. CSV: {ARQUIVO}")
         client.connect_async(BROKER, PORTA)
         client.loop_forever(retry_first_connection=True)
     except KeyboardInterrupt:

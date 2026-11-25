@@ -3,22 +3,22 @@
 Rodar a partir da raiz do repositorio, com o coletor (src/coletor.py) gravando os dados:
     streamlit run applications/dashboard/app.py
 
-Le as leituras no PostgreSQL e os arquivos que o coletor ja grava:
+Le os arquivos que o coletor ja grava:
+    leituras.csv                     timestamp, sensor_id, distancia_cm
     data/imagens/<sensor>/*.jpg      fotos (nome = data e hora da chegada)
 e grava a analise das fotos em data/analises_imagens.csv (cada foto e analisada uma vez).
 """
 import csv
-import os
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-import psycopg
 import streamlit as st
 
 import classificador
 
 RAIZ = Path(__file__).resolve().parents[2]
+ARQ_LEITURAS = RAIZ / "leituras.csv"
 PASTA_IMAGENS = RAIZ / "data" / "imagens"
 ARQ_ANALISES = RAIZ / "data" / "analises_imagens.csv"
 COLS_ANALISE = ["arquivo", "sensor", "timestamp", "classe", "rotulo", "confianca", "nivel_minimo"]
@@ -28,17 +28,11 @@ NIVEIS = {0: ("Normal", "🟢"), 1: ("Atencao", "🟡"), 2: ("Alerta", "🟠"), 
 
 
 # ------------------------------------------------------------------ logica (sem Streamlit, testavel)
-def carregar_leituras():
-    url = os.environ.get("PLUVIA_DB_URL")
-    if not url:
-        raise ValueError("Configure PLUVIA_DB_URL para consultar as leituras")
-    with psycopg.connect(url, connect_timeout=3) as conn:
-        linhas = conn.execute(
-            "SELECT ts_utc, sensor_id, distancia_cm FROM leituras_sensor "
-            "ORDER BY ts_utc DESC, leitura_id DESC LIMIT 500"
-        ).fetchall()
-    df = pd.DataFrame(linhas, columns=["timestamp", "sensor_id", "distancia_cm"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce", utc=True).dt.tz_convert("America/Recife").dt.tz_localize(None)
+def carregar_leituras(caminho=ARQ_LEITURAS):
+    if not Path(caminho).exists():
+        return pd.DataFrame(columns=["timestamp", "sensor_id", "distancia_cm"])
+    df = pd.read_csv(caminho)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df["distancia_cm"] = pd.to_numeric(df["distancia_cm"], errors="coerce")
     return df.dropna(subset=["timestamp", "distancia_cm"]).sort_values("timestamp")
 
@@ -121,11 +115,7 @@ def main():
 
     @st.fragment(run_every=5)
     def painel():
-        try:
-            leituras = carregar_leituras()
-        except (psycopg.Error, ValueError):
-            st.error("Não foi possível consultar o PostgreSQL. Verifique a conexão e PLUVIA_DB_URL.")
-            leituras = pd.DataFrame(columns=["timestamp", "sensor_id", "distancia_cm"])
+        leituras = carregar_leituras()
         fotos = listar_fotos()
         analises = carregar_analises()
 
@@ -137,7 +127,7 @@ def main():
         c1, c2, c3, c4 = st.columns(4)
         if leituras.empty:
             st.info("Aguardando leituras do sensor (o coletor está rodando?).")
-            nivel_sensor = None
+            nivel_sensor = 0
         else:
             ult = leituras.iloc[-1]
             nivel = nivel_agua_cm(ult["distancia_cm"], altura)
@@ -146,12 +136,9 @@ def main():
             c1.metric("Nível da água", f"{nivel:.1f} cm")
             c2.metric("Distância medida", f"{ult['distancia_cm']:.1f} cm")
             c3.metric("Última leitura", f"há {idade:.0f} s" if idade < 3600 else ult["timestamp"].strftime("%d/%m %H:%M"))
-        if nivel_sensor is None:
-            c4.metric("Status do ponto", "Sem leitura")
-        else:
-            geral = status_geral(nivel_sensor, nivel_img)
-            nome, icone = NIVEIS[geral]
-            c4.metric("Status do ponto", f"{icone} {nome}", help="Maior nível entre o sensor e a análise da imagem.")
+        geral = status_geral(nivel_sensor, nivel_img)
+        nome, icone = NIVEIS[geral]
+        c4.metric("Status do ponto", f"{icone} {nome}", help="Maior nível entre o sensor e a análise da imagem.")
 
         esq, dir_ = st.columns([3, 2])
         with esq:
@@ -160,7 +147,7 @@ def main():
                 serie = leituras.tail(janela).copy()
                 serie["nível da água (cm)"] = [nivel_agua_cm(d, altura) for d in serie["distancia_cm"]]
                 st.line_chart(serie.set_index("timestamp")[["nível da água (cm)"]])
-                st.caption(f"Sensor {leituras.iloc[-1]['sensor_id']} · {len(leituras)} leituras recentes · "
+                st.caption(f"Sensor {leituras.iloc[-1]['sensor_id']} · {len(leituras)} leituras salvas · "
                            f"nível = altura do sensor ({altura:.0f} cm) − distância medida")
         with dir_:
             st.subheader("Última foto")

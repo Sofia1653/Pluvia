@@ -1,7 +1,7 @@
 # Dashboard PLUVIA
 
 Mostra, a cada 5 segundos, o nível da água medido pelo sensor ultrassônico e as fotos da ESP32-CAM
-com a análise da IA (lixo / água acumulada / normal). Lê as medições do PostgreSQL e as fotos gravadas pelo `src/coletor.py`.
+com a análise da IA (lixo / água acumulada / normal). Lê os arquivos que o `src/coletor.py` grava.
 
 ## Instalar (uma vez)
 
@@ -24,9 +24,8 @@ Sem a IA, o dashboard funciona normalmente e mostra só o nível da água e as f
 São três janelas de terminal, todas na raiz do repositório:
 
 1. Broker: `docker start mosquitto`
-2. Inicie o PostgreSQL e configure `PLUVIA_DB_URL` nos terminais do coletor e do dashboard, conforme o README da raiz.
-3. Coletor: `python src/coletor.py`
-4. Dashboard: `streamlit run applications/dashboard/app.py`
+2. Coletor: `python src/coletor.py`
+3. Dashboard: `streamlit run applications/dashboard/app.py`
 
 O navegador abre sozinho em `http://localhost:8501`.
 
