@@ -17,7 +17,7 @@ DB_URL = os.environ.get("PLUVIA_DB_URL")
 # o coletor conecta nesse outro broker e nao recebe nada da ESP.
 # Para trocar sem editar o arquivo: defina a variavel de ambiente PLUVIA_BROKER.
 BROKER = os.environ.get("PLUVIA_BROKER", "192.168.100.10")
-PORTA = 1883
+PORTA = int(os.environ.get("PLUVIA_BROKER_PORTA", "1883"))
 
 
 def on_connect(client, userdata, flags, reason_code, properties):

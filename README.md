@@ -15,6 +15,7 @@ coletor e o dashboard. O modelo de risco por bairro fica em [pluvia-ml](https://
 | `src/teste_camera.cpp` | Teste isolado da câmera (foto no navegador, sem MQTT) |
 | `include/secrets.example.h` | Modelo de configuração de rede (copiar para `secrets.h`, que não vai para o Git) |
 | `src/coletor.py` | Assina o broker e salva leituras no PostgreSQL e fotos em `data/imagens/` |
+| `src/simulador.py` | Simula a ESP32 publicando leituras e, opcionalmente, uma foto via MQTT |
 | `applications/dashboard/` | Dashboard Streamlit com nível da água e análise das fotos por IA |
 | `schematics/` | Esquemático das ligações |
 | `docs/` | Guia de montagem, gravação e solução de problemas; diagrama da arquitetura |
@@ -38,6 +39,33 @@ coletor e o dashboard. O modelo de risco por bairro fica em [pluvia-ml](https://
 As leituras novas ficam no banco; o CSV antigo nao e importado automaticamente. As imagens continuam em disco.
 Se o banco ficar indisponivel, a leitura que falhar sera informada no log e nao sera reenviada; o coletor
 continua tentando salvar as proximas mensagens. Para testar: `python -m unittest discover -s test -v`.
+
+## Simulacao e teste de integracao
+
+Com o broker e o banco iniciados e o coletor conectado, execute em outro terminal:
+
+```powershell
+python src/simulador.py --broker 127.0.0.1 --sensor simulador01 --distancia 20
+```
+
+O simulador envia uma leitura a cada dois segundos ate Ctrl+C. Para uma demonstracao curta, acrescente
+`--quantidade 5`; para enviar uma imagem JPEG existente, acrescente `--foto caminho/para/foto.jpg`.
+Use `--intervalo` e `--porta` para mudar a frequencia e a porta do broker. As leituras simuladas ficam
+no banco identificadas pelo nome do sensor, e as fotos sao salvas pelo coletor na pasta desse sensor.
+
+O teste automatizado usa broker e PostgreSQL reais com `schema.sql` ja aplicado. Em um banco de teste,
+configure no PowerShell e execute:
+
+```powershell
+$env:PLUVIA_TEST_DB_URL = 'postgresql://pluvia:SENHA@localhost:5432/pluvia'
+$env:PLUVIA_TEST_BROKER = '127.0.0.1'
+python -m unittest discover -s test -v
+```
+
+Se necessario, defina `PLUVIA_TEST_BROKER_PORTA`. O teste cria um identificador de sensor exclusivo e
+remove suas leituras ao terminar. Sem `PLUVIA_TEST_DB_URL`, somente esse teste de integracao e pulado.
+Ele usa as funcoes reais do coletor, mas nao exige um processo separado do coletor. Para a demonstracao
+manual, execute o coletor e o simulador em terminais separados.
 
 ## Tópicos MQTT
 
