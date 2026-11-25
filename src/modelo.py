@@ -235,6 +235,40 @@ def treinar_testar(df, alvo, features, nome, params, anos_treino, anos_teste, us
     return metricas(r["y_te"], r["p_te"]), r
 
 
+def importancia_permutacao(df, alvo, features, nome, params, anos_treino, anos_teste, repeticoes=10,
+                           usa_propensao=True, semente=SEMENTE):
+    """Importancia por permutacao, fora da amostra: treina em anos_treino e, nos anos_teste, embaralha uma
+    variavel de entrada por vez (antes do preparo, como chegaria do sistema) e mede quanto PR-AUC e ROC-AUC caem.
+    Variaveis derivadas pelo preparo (ex.: *_nunca) acompanham a variavel original."""
+    params = {**PADROES[nome], **(params or {})}
+    sub = df[df["ano"].isin(list(anos_treino) + list(anos_teste))]
+    X = construir_X(sub, features, alvo, list(anos_treino), usa_propensao)
+    y = sub[alvo].values
+    tr = sub["ano"].isin(list(anos_treino)).values
+    preparador = prep.Preparador(**PREP_KW[nome]).fit(X[tr])
+    est = FABRICAS[nome](**params).fit(preparador.transform(X[tr]), y[tr])
+    X_te, y_te = X[~tr].reset_index(drop=True), y[~tr]
+
+    def pontua(Xx):
+        p = est.predict_proba(preparador.transform(Xx))[:, 1]
+        return average_precision_score(y_te, p), roc_auc_score(y_te, p)
+
+    ap0, roc0 = pontua(X_te)
+    rng = np.random.default_rng(semente)
+    linhas = []
+    for c in X_te.columns:
+        quedas_ap, quedas_roc = [], []
+        for _ in range(repeticoes):
+            Xp = X_te.copy()
+            Xp[c] = rng.permutation(Xp[c].values)
+            ap, roc = pontua(Xp)
+            quedas_ap.append(ap0 - ap); quedas_roc.append(roc0 - roc)
+        linhas.append({"variavel": c, "queda_pr_auc": np.mean(quedas_ap), "queda_pr_auc_desvio": np.std(quedas_ap),
+                       "queda_roc_auc": np.mean(quedas_roc), "queda_roc_auc_desvio": np.std(quedas_roc)})
+    tab = pd.DataFrame(linhas).set_index("variavel").sort_values("queda_pr_auc", ascending=False)
+    return tab, {"pr_auc": ap0, "roc_auc": roc0}
+
+
 def validar_estratificado(df, alvo, features, nome, params=None, k=5, semente=SEMENTE):
     """Contraste: k-fold estratificado com linhas embaralhadas (mistura dias do mesmo evento entre treino e teste).
     Sem propensao do bairro: numa divisao aleatoria nao ha como calcula-la sem ler o proprio rotulo."""

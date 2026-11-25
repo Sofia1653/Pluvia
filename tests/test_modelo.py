@@ -50,6 +50,15 @@ class ModelosTest(unittest.TestCase):
         self.assertAlmostEqual(m["precisao_top20"], 0.5)
         self.assertAlmostEqual(m["f1_top20"], 0.5)
 
+    def test_importancia_permutacao_acha_a_variavel_com_sinal(self):
+        X, y = dados(n=6000)
+        df = X.assign(alvo=y, ano=np.repeat([2014, 2015, 2016], 2000), bairro="b")
+        tab, base_ = mod.importancia_permutacao(df, "alvo", ["chuva_dia_mm", "alt_media_m"], "logistica", None,
+                                                [2014, 2015], [2016], repeticoes=3, usa_propensao=False)
+        self.assertEqual(tab.index[0], "chuva_dia_mm")              # embaralhar a chuva derruba o desempenho
+        self.assertGreater(tab.loc["chuva_dia_mm", "queda_roc_auc"], 0.1)
+        self.assertLess(abs(tab.loc["alt_media_m", "queda_roc_auc"]), 0.05)   # ruido: quase nada muda
+
     def test_pesos_positivos(self):
         w = mod._pesos_positivos(np.array([1, 0, 0, 0, 0]), 0.5)
         self.assertAlmostEqual(w[0], 2.0)                          # raiz de 4 negativos / 1 positivo
