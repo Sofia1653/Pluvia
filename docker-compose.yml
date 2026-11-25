@@ -1,0 +1,220 @@
+# Pluvia: sobe toda a infraestrutura com um comando.
+#   cp .env.example .env      (e troque as senhas)
+#   docker compose up -d --build
+#
+#   Dashboard  http://localhost:8501      API (docs)  http://localhost:8000/docs
+#   MLflow     http://localhost:5000      Airflow     http://localhost:8080
+#   MQTT       localhost:1883 (a ESP32 usa o IP deste computador na rede)
+#   Postgres   localhost:5432
+#
+# Sem o hardware: docker compose --profile simulador up -d   (publica leituras simuladas)
+
+x-airflow: &airflow
+  image: apache/airflow:2.10.5-python3.11
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:?defina no .env}@airflow-db/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Recife
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:?defina no .env}
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    PYTHONPATH: /opt/airflow/pluvia/src
+    PLUVIA_DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    TZ: America/Recife
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/pluvia/src:ro
+    - airflow_logs:/opt/airflow/logs
+  depends_on: &airflow-depends
+    airflow-db:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./embarcado/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
+      POSTGRES_DB: ${POSTGRES_DB:?defina no .env}
+      TZ: America/Recife
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_dados:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro   # so roda na primeira vez (volume vazio)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  coletor:
+    build:
+      context: .
+      dockerfile: embarcado/Dockerfile
+    environment:
+      PLUVIA_BROKER: mosquitto
+      PLUVIA_DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      PLUVIA_ALTURA_CM: ${PLUVIA_ALTURA_CM:-30}
+    volumes:
+      - dados_embarcado:/app/embarcado/dados      # leituras.csv e imagens/, compartilhado com o dashboard
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  simulador:
+    profiles: ["simulador"]
+    build:
+      context: .
+      dockerfile: embarcado/Dockerfile
+    command: ["python", "embarcado/simulador.py"]
+    environment:
+      PLUVIA_BROKER: mosquitto
+      PLUVIA_ALTURA_CM: ${PLUVIA_ALTURA_CM:-30}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.1.4
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artefatos
+      --serve-artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_dados:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      PLUVIA_DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      PLUVIA_BROKER: mosquitto
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: applications/dashboard/Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      - dados_embarcado:/app/embarcado/dados
+    depends_on:
+      - coletor
+      - api
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- Airflow (banco de metadados proprio)
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:?defina no .env}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - airflow db migrate && airflow users create --role Admin --username "$${ADMIN_USER}" --password "$${ADMIN_PASSWORD}" --firstname Pluvia --lastname Admin --email admin@pluvia.local || true
+    environment:
+      <<: *airflow-env
+      ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?defina no .env}
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow
+    command: scheduler
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  pg_dados:
+  dados_embarcado:
+  mlflow_dados:
+  airflow_db:
+  airflow_logs:
