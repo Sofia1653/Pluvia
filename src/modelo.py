@@ -138,13 +138,15 @@ PREP_KW = {"logistica": dict(log=True, escala=True, imputar=True),
 
 # ------------------------------------------------------------------ metricas
 def metricas(y, p, qs=(0.01, 0.05)):
-    """PR-AUC (principal), ROC-AUC e, para cada fatia q de maior risco, recall e precisao."""
+    """PR-AUC (principal), ROC-AUC e, para cada fatia q de maior risco em alerta, recall, precisao e
+    F1 da classe positiva (media harmonica de recall e precisao nesse corte)."""
     y = np.asarray(y)
     p = np.asarray(p, dtype=float)
     out = {"pr_auc": np.nan, "roc_auc": np.nan, "taxa_base": float(y.mean())}
     for q in qs:
         out[f"recall_top{round(q * 100)}"] = np.nan
         out[f"precisao_top{round(q * 100)}"] = np.nan
+        out[f"f1_top{round(q * 100)}"] = np.nan
     if y.sum() == 0 or y.sum() == len(y):
         return out
     out["pr_auc"] = float(average_precision_score(y, p))
@@ -153,8 +155,10 @@ def metricas(y, p, qs=(0.01, 0.05)):
     for q in qs:
         k = max(int(len(p) * q), 1)
         achados = float(y[ordem[:k]].sum())
-        out[f"recall_top{round(q * 100)}"] = achados / float(y.sum())
-        out[f"precisao_top{round(q * 100)}"] = achados / k
+        rec, prec = achados / float(y.sum()), achados / k
+        out[f"recall_top{round(q * 100)}"] = rec
+        out[f"precisao_top{round(q * 100)}"] = prec
+        out[f"f1_top{round(q * 100)}"] = 2 * rec * prec / (rec + prec) if rec + prec > 0 else 0.0
     return out
 
 
@@ -229,6 +233,40 @@ def treinar_testar(df, alvo, features, nome, params, anos_treino, anos_teste, us
     r = _ajusta_prediz(df, alvo, features, nome, params, anos_treino, anos_teste, usa_propensao, 1.0,
                        np.random.default_rng(semente), devolver_treino)
     return metricas(r["y_te"], r["p_te"]), r
+
+
+def importancia_permutacao(df, alvo, features, nome, params, anos_treino, anos_teste, repeticoes=10,
+                           usa_propensao=True, semente=SEMENTE):
+    """Importancia por permutacao, fora da amostra: treina em anos_treino e, nos anos_teste, embaralha uma
+    variavel de entrada por vez (antes do preparo, como chegaria do sistema) e mede quanto PR-AUC e ROC-AUC caem.
+    Variaveis derivadas pelo preparo (ex.: *_nunca) acompanham a variavel original."""
+    params = {**PADROES[nome], **(params or {})}
+    sub = df[df["ano"].isin(list(anos_treino) + list(anos_teste))]
+    X = construir_X(sub, features, alvo, list(anos_treino), usa_propensao)
+    y = sub[alvo].values
+    tr = sub["ano"].isin(list(anos_treino)).values
+    preparador = prep.Preparador(**PREP_KW[nome]).fit(X[tr])
+    est = FABRICAS[nome](**params).fit(preparador.transform(X[tr]), y[tr])
+    X_te, y_te = X[~tr].reset_index(drop=True), y[~tr]
+
+    def pontua(Xx):
+        p = est.predict_proba(preparador.transform(Xx))[:, 1]
+        return average_precision_score(y_te, p), roc_auc_score(y_te, p)
+
+    ap0, roc0 = pontua(X_te)
+    rng = np.random.default_rng(semente)
+    linhas = []
+    for c in X_te.columns:
+        quedas_ap, quedas_roc = [], []
+        for _ in range(repeticoes):
+            Xp = X_te.copy()
+            Xp[c] = rng.permutation(Xp[c].values)
+            ap, roc = pontua(Xp)
+            quedas_ap.append(ap0 - ap); quedas_roc.append(roc0 - roc)
+        linhas.append({"variavel": c, "queda_pr_auc": np.mean(quedas_ap), "queda_pr_auc_desvio": np.std(quedas_ap),
+                       "queda_roc_auc": np.mean(quedas_roc), "queda_roc_auc_desvio": np.std(quedas_roc)})
+    tab = pd.DataFrame(linhas).set_index("variavel").sort_values("queda_pr_auc", ascending=False)
+    return tab, {"pr_auc": ap0, "roc_auc": roc0}
 
 
 def validar_estratificado(df, alvo, features, nome, params=None, k=5, semente=SEMENTE):
