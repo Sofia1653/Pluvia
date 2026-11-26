@@ -125,6 +125,10 @@ services:
       PLUVIA_DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       PLUVIA_BROKER: mosquitto
       MLFLOW_TRACKING_URI: http://mlflow:5000
+    
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./csv:/app/csv:ro
     ports:
       - "8000:8000"
     depends_on:
