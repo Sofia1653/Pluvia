@@ -1,0 +1,17 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+psycopg[binary]>=3.1,<4
+pandas==2.3.3
+numpy==2.0.2
+scikit-learn==1.6.1
+mlflow==3.1.4
+sqlalchemy>=2.0,<2.1
+joblib==1.5.3
+psutil==7.2.2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.1+cpu
+transformers==4.52.4
+Pillow>=10,<12
+python-multipart
+pytest>=8,<9
+httpx>=0.27,<1

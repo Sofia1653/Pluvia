@@ -1,4 +1,4 @@
-"""Dashboard do PLUVIA: nivel da agua (sensor ultrassonico) + analise das fotos (ESP32-CAM).
+﻿"""Dashboard do PLUVIA: nivel da agua (sensor ultrassonico) + analise das fotos (ESP32-CAM).
 
 Rodar a partir da raiz do repositorio, com o coletor (src/coletor.py) gravando os dados:
     streamlit run applications/dashboard/app.py

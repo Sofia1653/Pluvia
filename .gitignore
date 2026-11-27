@@ -1,53 +1,59 @@
-# --- PlatformIO ---
-.pio/
-.pioenvs/
-.piolibdeps/
-
-# --- VS Code (mantem so as configs compartilhaveis) ---
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/ipch
-*.code-workspace
-
-# --- Segredos (Wi-Fi, senhas, chaves) ---
-secrets.h
-include/secrets.h
-.env
-*.pem
-*.key
-passwd
-mosquitto_passwd
-
-# --- Mosquitto (dados e logs gerados em execucao) ---
-mosquitto.db
-mosquitto.log
-mosquitto.conf.txt
-
-# --- Python ---
+﻿# Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
+dist/
 .venv/
 venv/
 env/
+.python-version
+
+# Jupyter
 .ipynb_checkpoints/
 
-# --- Dados coletados (descomente se NAO quiser versionar o dataset) ---
-# leituras.csv
-# *.csv
+# MLflow (runs, artefatos e modelos registrados)
+mlruns/
+mlartifacts/
+notebooks/mlruns/
+mlflow.db
 
-# --- Modelos de ML treinados (podem ficar pesados) ---
+# Dados (brutos, processados e INMET) - podem ser grandes/reprodutíveis
+raw/
+inmet_a301/
+processed/
+
+# Modelos treinados
+modelos/
 *.pkl
 *.joblib
 *.h5
+*.pt
+*.onnx
 
-# --- Sistema operacional / editores ---
+# Dados em formatos comuns
+*.csv
+*.parquet
+*.feather
+*.zip
+
+# Segredos
+.env
+*.key
+*.pem
+secrets.h
+passwd
+mosquitto_passwd
+
+# Editores / SO
 .DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-*~
+.idea/
+.vscode/
 
-leituras.csv
-data/imagens/
-data/analises_imagens.csv
+# Embarcado (ESP32-CAM)
+embarcado/firmware/include/secrets.h
+embarcado/firmware/.pio/
+embarcado/dados/
+embarcado/firmware/compile_commands.json
+
+.pio/

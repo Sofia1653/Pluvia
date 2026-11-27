@@ -1,4 +1,4 @@
-# Dashboard PLUVIA
+﻿# Dashboard PLUVIA
 
 Mostra, a cada 5 segundos, o nível da água medido pelo sensor ultrassônico e as fotos da ESP32-CAM
 com a análise da IA (lixo / água acumulada / normal). Lê as medições do PostgreSQL e as fotos gravadas pelo `src/coletor.py`.

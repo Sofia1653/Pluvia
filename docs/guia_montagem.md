@@ -1,4 +1,4 @@
-# Guia da ESP32-CAM — montagem, gravação e problemas comuns
+﻿# Guia da ESP32-CAM — montagem, gravação e problemas comuns
 
 Testado de 27/10 a 10/11/2026. Esquemático: `schematics/esquematico_pluvia.png`.
 

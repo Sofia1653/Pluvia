@@ -1,0 +1,12 @@
+# versoes testadas com Python 3.9.6 (macOS, o mesmo dos notebooks) e Python 3.11 (Windows).
+# No Windows use Python 3.10+: com 3.9 o pip tenta compilar o greenlet (dependencia do mlflow) e exige o Visual C++.
+pandas==2.3.3
+numpy==2.0.2
+scikit-learn==1.6.1
+matplotlib==3.9.4
+mlflow==3.1.4
+# o mlflow 3.1.4 nao importa com SQLAlchemy 2.1 (sem FallbackAsyncAdaptedQueuePool)
+sqlalchemy>=2.0,<2.1
+jupyter==1.1.1
+optuna==5.0.0
+joblib==1.5.3
