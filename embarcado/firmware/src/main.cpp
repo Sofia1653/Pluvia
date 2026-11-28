@@ -22,6 +22,8 @@ unsigned long ultimaLeitura = 0;
 unsigned long ultimaFoto = 0;
 unsigned long tentativaMQTT = 0;
 unsigned long tentativaWiFi = 0;
+bool wifiEstavaConectado = false;
+bool mqttTentado = false;
 
 bool iniciarCamera() {
     camera_config_t config = {};
@@ -114,6 +116,7 @@ void setup() {
     mqtt.setBufferSize(256);
     mqtt.setSocketTimeout(3);
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     // Economia de energia do radio entre os envios (menos calor).
     WiFi.setSleep(true);
     WiFi.begin(WIFI_SSID, WIFI_SENHA);
@@ -123,6 +126,13 @@ void setup() {
 void loop() {
     unsigned long agora = millis();
     if (WiFi.status() != WL_CONNECTED) {
+        if (wifiEstavaConectado) {
+            wifiEstavaConectado = false;
+            mqttTentado = false;
+            wifiClient.stop();
+            tentativaWiFi = agora;
+            Serial.println("Wi-Fi perdido; aguardando reconexao automatica.");
+        }
         // Sem rede, tenta a cada 30 s (antes 10 s): procurar rede sem parar esquenta a placa.
         if (agora - tentativaWiFi >= 30000) {
             tentativaWiFi = agora;
@@ -132,8 +142,14 @@ void loop() {
         delay(100);
         return;
     }
+    if (!wifiEstavaConectado) {
+        wifiEstavaConectado = true;
+        mqttTentado = false;
+        Serial.println("Wi-Fi conectado.");
+    }
     if (!mqtt.connected()) {
-        if (agora - tentativaMQTT >= 3000) {
+        if (!mqttTentado || agora - tentativaMQTT >= 3000) {
+            mqttTentado = true;
             tentativaMQTT = agora;
             String id = "PluviaESP32-" + String((uint32_t)ESP.getEfuseMac(), HEX);
             Serial.print("IP da placa: ");
