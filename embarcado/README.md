@@ -1,52 +1,45 @@
-# Pluvia — ESP32-CAM e ultrassom
+﻿# Embarcados Pluvia
 
-Configuracao preparada para **AI Thinker ESP32-CAM / OV2640**, conforme a placa `esp32cam` do PlatformIO.
+ESP32-CAM AI Thinker com câmera OV2640 e sensor ultrassônico. O firmware está em `embarcado/firmware`, o coletor em `embarcado/coletor.py` e o simulador em `embarcado/simulador.py`. Para arquitetura, tópicos MQTT e execução integrada, consulte `INTEGRACAO.md` na raiz.
 
-Trazido do branch `camera` de [Sofia1653/Pluvia](https://github.com/Sofia1653/Pluvia/tree/camera) (commit `7a40e99`). O firmware fica em `embarcado/firmware/` (projeto PlatformIO) e o coletor em `embarcado/coletor.py`.
+## Executar a infraestrutura
 
-## Configurar e executar
+Copie `.env.example` para `.env`, configure as senhas e execute na raiz:
 
-1. Copie `embarcado/firmware/include/secrets.example.h` para `embarcado/firmware/include/secrets.h`.
-2. Preencha o nome e a senha do Wi-Fi de 2,4 GHz. Configure `MQTT_BROKER` com o IPv4 do computador na mesma rede da placa. O exemplo usa `172.26.68.103`, observado nesta maquina; confira novamente com `ipconfig` se a rede mudar. Nao use `127.0.0.1` no ESP32.
-3. Inicie o broker com `mosquitto -c embarcado/mosquitto.conf -v` (use apenas uma instancia na porta 1883). A rede precisa permitir acesso da placa ao computador nessa porta.
-4. Compile e grave com PlatformIO, dentro de `embarcado/firmware`: `pio run -t upload`. Abra o Monitor Serial a **9600 baud**. O codigo imprime o resultado da camera, o IP, a conexao MQTT e cada envio.
-5. Instale a dependencia Python, se necessario: `python -m pip install "paho-mqtt>=2,<3"`.
-6. No computador do broker, execute `PLUVIA_BROKER=<ip do broker> python embarcado/coletor.py`. Reinicie o coletor se ele ja estava aberto antes da atualizacao.
-
-`embarcado/firmware/include/secrets.h` ja esta ignorado pelo Git. Sem esse arquivo, o firmware compila com valores de exemplo e nao conectara ao Wi-Fi ate serem preenchidos.
-
-## Ligacoes do ultrassom
-
-O firmware preserva **TRIG no GPIO14** e **ECHO no GPIO15**, com GND comum. Esses pinos sao compartilhados com microSD: este projeto nao inicializa o cartao; use sem cartao inserido.
-
-Se o sensor for HC-SR04 de 5 V, alimente conforme sua especificacao e use divisor resistivo/conversor para reduzir ECHO a 3,3 V antes do GPIO15. Por exemplo: ECHO → 1 kohm → GPIO15 → 2 kohm → GND. Nao conecte ECHO de 5 V diretamente ao ESP32. Use fonte estavel apropriada para a ESP32-CAM; resets durante fotos podem indicar alimentacao insuficiente.
-
-## Dados recebidos
-
-- A cada 2 segundos: JSON em `pluvia/sensor01/leituras`, com `sensor_id` e `distancia_cm`; gravado no PostgreSQL.
-- A cada 10 segundos: foto JPEG 320x240 em `pluvia/sensor01/camera`; gravada em `data/imagens/sensor01/`, com data e hora no nome. Sao fotos periodicas, sem streaming de video ou classificacao de imagem.
-- Distancias fora de 2–400 cm ou sem eco sao descartadas e informadas no Serial. A camera continua enviando mesmo sem leitura valida do ultrassom.
-- Se a camera nao inicializar, o ultrassom continua funcionando. Confira o cabo da camera/modelo da placa e reinicie apos corrigir.
-
-As fotos se acumulam em disco; remova ou arquive conforme necessario. O timestamp e o horario local do computador coletor.
-
-## Diagnostico
-
-- `Wi-Fi desconectado`: confira credenciais, rede de 2,4 GHz e sinal.
-- `Falha MQTT`: confira IP do broker, porta 1883, firewall e acesso entre os dispositivos.
-- Coletor conectado, mas sem dados: confira no Serial se a placa informa `MQTT conectado` e `publicado`.
-- `Ultrassom sem leitura valida`: confira pinos, alimentacao, divisor de ECHO e objeto dentro da faixa do sensor.
-
-Referencias de implementacao: [CameraWebServer da Espressif](https://github.com/espressif/arduino-esp32/tree/master/libraries/ESP32/examples/Camera/CameraWebServer) e [API PubSubClient](https://pubsubclient.knolleary.net/api.html).
-
-## Testes do coletor
-
-```bash
-python -m unittest embarcado/test_coletor.py
+```powershell
+docker compose up -d --build
+docker compose logs -f coletor
 ```
 
-Para testar so a camera (pagina com foto no navegador): `pio run -e teste-camera -t upload`.
+O Compose configura `PLUVIA_BROKER` e `PLUVIA_DB_URL`. O coletor exige o banco, grava leituras na tabela `leituras_sensor` e imagens em `data/imagens` no volume compartilhado. Para execução local, instale `embarcado/requirements.txt`, configure as duas variáveis para o broker e o PostgreSQL acessíveis e rode `python embarcado/coletor.py`. A porta MQTT pode ser definida por `PLUVIA_BROKER_PORTA` (padrão 1883).
 
-## Banco de dados
+## Simulador
 
-O coletor exige `PLUVIA_DB_URL` e grava leituras em `leituras_sensor`. As fotos sao gravadas em `data/imagens`. Veja `INTEGRACAO.md` para Docker e bancos existentes.
+```powershell
+# Na raiz, com a infraestrutura em execução
+docker compose --profile simulador up -d --build simulador
+# Uma leitura de teste, sem alterar o simulador em execução
+docker compose run --rm simulador --sensor demo --distancia 12.5 --quantidade 1
+# Localmente, após instalar as dependências e com broker acessível
+python embarcado/simulador.py --broker 127.0.0.1 --sensor demo --distancia 12.5 --quantidade 1 --foto caminho/foto.jpg
+# Niveis variam automaticamente entre 5 e 30 cm em 60 segundos
+python embarcado/simulador.py --broker 127.0.0.1 --sensor demo --variar --minimo 5 --maximo 30 --periodo 60
+```
+
+Sem `--quantidade`, publica continuamente; `--intervalo` define o intervalo em segundos, e `--foto` publica um JPEG local a cada 10 segundos. Com `--variar`, a distância oscila entre `--minimo` e `--maximo` durante `--periodo`; sem essa opção ela é fixa. `--help` lista os argumentos. `PLUVIA_ALTURA_CM` não altera os valores do simulador. Para usar o ciclo no Docker: `docker compose run --rm simulador --sensor demo --variar --minimo 5 --maximo 30 --periodo 60`. Pare o serviço contínuo com `docker compose --profile simulador stop simulador`.
+
+## Firmware e montagem
+
+1. Copie `embarcado/firmware/include/secrets.example.h` para `secrets.h` na mesma pasta e preencha Wi-Fi de 2,4 GHz e IP do computador que hospeda o broker. Não use `localhost` na placa.
+2. Dentro de `embarcado/firmware`, compile com `pio run -e esp32cam`; para gravar, use `pio run -e esp32cam -t upload`. O monitor serial usa 9600 baud. Para o teste isolado da câmera, use o ambiente `teste-camera`.
+3. O código usa TRIG no GPIO14 e ECHO no GPIO15, pinos compartilhados com microSD; não inicializa o cartão. Para HC-SR04 de 5 V, reduza ECHO a 3,3 V com divisor ou conversor, mantenha GND comum e alimentação estável. Confira pinagem e níveis antes de ligar.
+4. O firmware publica uma leitura a cada 2 s e JPEG a cada 10 s enquanto conectado. Câmera e ligações precisam ser validadas na placa. Fotos acumulam no disco.
+
+## Testes e material
+
+`python -m unittest embarcado.test_coletor -v` executa os testes unitários. O teste com banco e broker reais é opcional e descrito em `ROBUSTEZ.md`.
+
+- `ROBUSTEZ.md`: limites atuais e proposta de recuperação de leituras.
+- `ROTEIRO.md`: preparação e roteiro para demonstração.
+- `TEXTO_EMBARCADOS.md`: texto inicial para o trabalho escrito.
+- `PLANO_FIRMWARE.md`: reconexão e planejamento de LED RGB e FreeRTOS.

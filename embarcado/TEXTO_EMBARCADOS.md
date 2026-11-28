@@ -1,0 +1,9 @@
+﻿# Embarcados: texto inicial
+
+O subsistema embarcado do Pluvia foi projetado para observar um ponto de monitoramento por meio de um sensor ultrassônico e uma câmera ligados a uma ESP32-CAM AI Thinker. O ultrassom mede a distância entre a placa e a superfície observada. Conhecida a altura de montagem em relação ao fundo, a diferença entre altura e distância pode ser usada para estimar o nível de água. A calibração e a adequação da instalação ainda precisam ser verificadas em campo.
+
+O firmware consulta o sensor a cada dois segundos e publica leituras válidas entre 2 e 400 cm em JSON via MQTT. A câmera, quando inicializada com sucesso, publica periodicamente imagens JPEG em tópico próprio. O equipamento tenta restabelecer a conexão Wi-Fi e MQTT após falhas; mensagens produzidas durante a desconexão não são armazenadas para reenvio. A placa utiliza credenciais e endereço do broker configurados em arquivo local fora do controle de versão.
+
+No computador, o Mosquitto recebe as publicações e o coletor valida o conteúdo. As leituras aceitas são persistidas no PostgreSQL, com horário de recepção, e as imagens são gravadas em disco para visualização pelo dashboard. Valores inválidos são descartados. Falhas de banco são registradas, mas a leitura afetada ainda não é recuperada. A arquitetura e os testes propostos para uma fila durável estão descritos em `ROBUSTEZ.md`.
+
+Os testes de software permitem verificar validação e tratamento de falhas simuladas, além de oferecer um simulador MQTT sem a placa. A montagem, as medições, a estabilidade das conexões e a operação da câmera dependem de validação física; portanto não se apresentam aqui resultados experimentais de campo. O identificador do tópico da câmera difere do identificador das leituras e deve ser harmonizado para associar os dois fluxos.
