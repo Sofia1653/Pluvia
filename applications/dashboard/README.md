@@ -30,6 +30,18 @@ São três janelas de terminal, todas na raiz do repositório:
 
 O navegador abre sozinho em `http://localhost:8501`.
 
+O seletor de sensor e o intervalo de datas filtram o grafico de leituras. Os indicadores de nivel atual,
+tempo desde a ultima leitura e maximo do dia usam o sensor selecionado, independentemente do periodo do
+grafico. O dia segue o fuso America/Recife; o nivel maximo usa a menor distancia medida no dia e a altura
+configurada na barra lateral. Apos 10 minutos sem leitura, o painel avisa e deixa o status como sem leitura recente.
+
+Fotos usam o identificador do topico MQTT da camera, que pode ser diferente do `sensor_id` das leituras.
+Selecione a camera associada ao sensor no painel: por exemplo, para a placa atual selecione `sensor01`
+para o sensor `PLUVIA_01`. Quando os nomes coincidem, a camera e selecionada por padrao; caso contrario,
+nenhuma e associada ate a escolha manual. A associacao vale para a sessao e deve ser confirmada para cada
+sensor. Somente a ultima foto recente da camera associada pode contribuir para o status. Fotos antigas
+podem ser exibidas, mas nao alteram o status. Configure os tres limites em ordem crescente.
+
 ## Como o status é calculado
 
 - **Nível da água** = altura do sensor até o fundo seco − distância medida. A altura é ajustada na barra lateral.
