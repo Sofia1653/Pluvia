@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -13,6 +13,17 @@ coletor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coletor)
 
 class ColetorTest(unittest.TestCase):
+    def test_reconexao_reassina_topicos_e_recusa_nao_assina(self):
+        client = MagicMock()
+        client.subscribe.return_value = (coletor.mqtt.MQTT_ERR_SUCCESS, 1)
+        coletor.on_connect(client, None, None, 1, None)
+        client.subscribe.assert_not_called()
+        coletor.on_connect(client, None, None, 0, None)
+        coletor.on_disconnect(client, None, None, 1, None)
+        coletor.on_connect(client, None, None, 0, None)
+        self.assertEqual(client.subscribe.call_count, 2)
+        client.subscribe.assert_called_with([(coletor.TOPICO, 0), (coletor.TOPICO_CAMERA, 0)])
+
     def test_leituras_invalidas_nao_interrompem_gravacao(self):
         with patch.object(coletor.psycopg, 'connect') as conectar:
             for payload in [b'{}', b'[]', b'\xff', b'{"sensor_id":"x","distancia_cm":NaN}', b'{"sensor_id":"x","distancia_cm":true}', b'{"sensor_id":"x","distancia_cm":7.5}', b'{"sensor_id":"x","distancia_cm":8}']:
@@ -39,6 +50,15 @@ class ColetorTest(unittest.TestCase):
             coletor.on_message(None, None, msg)
             coletor.on_message(None, None, msg)
             self.assertEqual(conectar.call_count, 2)
+
+    def test_falha_de_gravacao_descarta_leitura_e_proxima_consegue_gravar(self):
+        with patch.object(coletor.psycopg, 'connect') as conectar:
+            conn = conectar.return_value.__enter__.return_value
+            conn.execute.side_effect = [coletor.psycopg.OperationalError('banco indisponivel'), None]
+            msg = SimpleNamespace(topic='pluvia/sensor01/leituras', payload=b'{"sensor_id":"x","distancia_cm":8}')
+            coletor.on_message(None, None, msg)
+            coletor.on_message(None, None, msg)
+            self.assertEqual(conn.execute.call_count, 2)
 
 if __name__ == '__main__':
     unittest.main()

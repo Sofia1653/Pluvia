@@ -36,6 +36,11 @@ def on_connect_fail(client, userdata):
     print(f"Nao foi possivel conectar a {BROKER}:{PORTA}. Tentando novamente.")
 
 
+def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+    if reason_code != 0:
+        logging.warning("Conexao MQTT interrompida (%s); tentando reconectar", reason_code)
+
+
 def on_message(client, userdata, msg):
     if mqtt.topic_matches_sub(TOPICO_CAMERA, msg.topic):
         salvar_imagem(msg)
@@ -101,6 +106,7 @@ def main():
     client.enable_logger()
     client.on_connect = on_connect
     client.on_connect_fail = on_connect_fail
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
     client.reconnect_delay_set(min_delay=1, max_delay=30)
     try:
