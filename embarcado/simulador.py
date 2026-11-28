@@ -25,6 +25,11 @@ def publicar_foto(client, sensor, foto):
         raise RuntimeError("Nao foi possivel publicar a foto")
 
 
+def distancia_no_ciclo(tempo, minimo, maximo, periodo):
+    """Oscila suavemente entre as distancias configuradas."""
+    return round(minimo + (maximo - minimo) * (1 + math.cos(2 * math.pi * tempo / periodo)) / 2, 2)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--broker", default=os.environ.get("PLUVIA_BROKER", "127.0.0.1"))
@@ -34,6 +39,10 @@ def main():
     parser.add_argument("--intervalo", type=float, default=2.0, help="Segundos entre leituras")
     parser.add_argument("--quantidade", type=int, default=0, help="Numero de leituras; 0 publica ate Ctrl+C")
     parser.add_argument("--foto", type=Path, help="JPEG a publicar a cada 10 segundos")
+    parser.add_argument("--variar", action="store_true", help="Oscilar a distancia ao longo do tempo")
+    parser.add_argument("--minimo", type=float, default=5.0, help="Menor distancia no ciclo, em cm")
+    parser.add_argument("--maximo", type=float, default=30.0, help="Maior distancia no ciclo, em cm")
+    parser.add_argument("--periodo", type=float, default=60.0, help="Duracao do ciclo em segundos")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.sensor):
         parser.error("sensor deve conter apenas letras, numeros, _ ou -")
@@ -41,6 +50,9 @@ def main():
         parser.error("distancia deve estar entre 2 e 400 cm")
     if not math.isfinite(args.intervalo) or args.intervalo <= 0 or args.quantidade < 0:
         parser.error("intervalo deve ser positivo e quantidade nao pode ser negativa")
+    if args.variar and (not all(math.isfinite(v) for v in (args.minimo, args.maximo, args.periodo))
+                        or not 2 <= args.minimo < args.maximo <= 400 or args.periodo <= 0):
+        parser.error("ciclo requer 2 <= minimo < maximo <= 400 e periodo positivo")
     foto = None
     if args.foto:
         try:
@@ -55,10 +67,12 @@ def main():
         client.connect(args.broker, args.porta, 60)
         client.loop_start()
         proxima_foto = 0.0
+        inicio = time.monotonic()
         enviadas = 0
         while not args.quantidade or enviadas < args.quantidade:
-            publicar_leitura(client, args.sensor, args.distancia)
-            print(f"Leitura publicada: {args.sensor} - {args.distancia} cm", flush=True)
+            distancia = distancia_no_ciclo(time.monotonic() - inicio, args.minimo, args.maximo, args.periodo) if args.variar else args.distancia
+            publicar_leitura(client, args.sensor, distancia)
+            print(f"Leitura publicada: {args.sensor} - {distancia} cm", flush=True)
             enviadas += 1
             if foto is not None and time.monotonic() >= proxima_foto:
                 publicar_foto(client, args.sensor, foto)
